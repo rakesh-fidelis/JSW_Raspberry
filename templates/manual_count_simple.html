@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manual Count</title>
+  <style>
+    body { font-family: Segoe UI, Arial, sans-serif; margin: 20px; }
+    .wrap { max-width: 520px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 16px; }
+    .row { display: flex; gap: 10px; align-items: center; margin: 8px 0; }
+    .row label { width: 90px; }
+    .row input { width: 120px; padding: 6px 8px; }
+    .btn { padding: 8px 12px; border: 0; background: #2b6cb0; color: #fff; cursor: pointer; border-radius: 4px; }
+    .btn:disabled { background: #a0aec0; cursor: not-allowed; }
+    .muted { color: #666; font-size: 12px; }
+    .counts { display: flex; gap: 14px; margin: 8px 0 14px; }
+    .counts div { background: #f7fafc; padding: 10px 12px; border-radius: 6px; }
+    img { max-width: 100%; border-radius: 6px; border: 1px solid #e2e8f0; }
+  </style>
+  <script>
+    async function loadCounts() {
+      try {
+        const res = await fetch('/counting');
+        const data = await res.json();
+        document.getElementById('currIn').textContent = data.bag_in ?? 0;
+        document.getElementById('currOut').textContent = data.bag_out ?? 0;
+        document.getElementById('currTotal').textContent = (data.bag_in ?? 0) + (data.bag_out ?? 0);
+      } catch {}
+    }
+    async function setCount(which) {
+      const val = parseInt(document.getElementById('input_' + which).value || '0', 10);
+      const body = which === 'count' ? { count: val } : { [which]: val };
+      const btn = document.getElementById('btn_' + which);
+      btn.disabled = true;
+      try {
+        const res = await fetch('/update_count', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await res.json();
+        if (!res.ok || data.success === false) alert(data.error || 'Failed');
+      } catch (e) { alert('Network error'); }
+      btn.disabled = false;
+      loadCounts();
+    }
+    window.addEventListener('DOMContentLoaded', loadCounts);
+  </script>
+  </head>
+<body>
+  <div class="wrap">
+    <h1>Manual Count</h1>
+    <div class="counts">
+      <div>In: <b id="currIn">0</b></div>
+      <div>Out: <b id="currOut">0</b></div>
+      <div>Total: <b id="currTotal">0</b></div>
+    </div>
+    <div class="row">
+      <label for="input_in">Bags In</label>
+      <input id="input_in" type="number" min="0" />
+      <button id="btn_in" class="btn" onclick="setCount('in')">Set In</button>
+    </div>
+    <div class="row">
+      <label for="input_out">Bags Out</label>
+      <input id="input_out" type="number" min="0" />
+      <button id="btn_out" class="btn" onclick="setCount('out')">Set Out</button>
+    </div>
+    <p class="muted">Changes reflect in overlay, /counting, and /daily_summary.</p>
+    <img src="/video_feed" alt="Live" />
+  </div>
+</body>
+</html>
+
+

@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Control Panel</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .camera-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .camera-card {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .camera-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .camera-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 0;
+        }
+        .camera-status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .online {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .offline {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .controls {
+            margin-top: 15px;
+        }
+        .counter {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .counter-label {
+            width: 100px;
+            font-weight: bold;
+        }
+        .counter-value {
+            width: 60px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .counter-buttons {
+            display: flex;
+            margin-left: 10px;
+        }
+        button {
+            cursor: pointer;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            margin-right: 5px;
+            font-weight: bold;
+        }
+        button.increment {
+            background-color: #28a745;
+            color: white;
+        }
+        button.decrement {
+            background-color: #dc3545;
+            color: white;
+        }
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #2196F3;
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        .counting-status {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .counting-label {
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        .refresh-button {
+            background-color: #17a2b8;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 20px;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .transshipment-card {
+            background-color: #f0f8ff;
+        }
+        .save-button {
+            background-color: #007bff;
+            color: white;
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 16px;
+        }
+        .error-message {
+            color: #dc3545;
+            font-weight: bold;
+            text-align: center;
+            margin-top: 10px;
+        }
+        .success-message {
+            color: #28a745;
+            font-weight: bold;
+            text-align: center;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Camera Control Panel</h1>
+        <button id="refresh" class="refresh-button">Refresh Data</button>
+        
+        <div class="camera-grid" id="camera-grid">
+            <!-- Camera cards will be inserted here by JavaScript -->
+            <div class="loading">Loading camera data...</div>
+        </div>
+
+        <div id="message-area"></div>
+    </div>
+
+    <script>
+        // Camera configuration
+        const cameras = [
+            { id: "602", name: "Camera 6", logicalId: "cam6", isTransshipment: false },
+            { id: "102", name: "Camera 1", logicalId: "cam1", isTransshipment: false },
+            { id: "202", name: "Camera 2", logicalId: "cam2", isTransshipment: false },
+            { id: "302", name: "Camera 3", logicalId: "cam3", isTransshipment: false },
+            { id: "402", name: "Camera 4", logicalId: "cam4", isTransshipment: false },
+            { id: "502", name: "Camera 5", logicalId: "cam5", isTransshipment: false },
+            { id: "702", name: "Camera 7", logicalId: "cam7", isTransshipment: false },
+            { id: "802", name: "Transshipment", logicalId: "tranship", isTransshipment: true }
+        ];
+
+        // Show message function
+        function showMessage(message, isError = false) {
+            const messageArea = document.getElementById('message-area');
+            messageArea.innerHTML = `<div class="${isError ? 'error-message' : 'success-message'}">${message}</div>`;
+            
+            // Clear message after 5 seconds
+            setTimeout(() => {
+                messageArea.innerHTML = '';
+            }, 5000);
+        }
+
+        // Function to fetch camera data
+        async function fetchCameraData() {
+            try {
+                const response = await fetch('/cam6/daily_summary');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch camera data');
+                }
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('Error fetching camera data:', error);
+                showMessage('Error loading camera data. Please try again.', true);
+                return null;
+            }
+        }
+
+        // Function to toggle counting for a camera
+        async function toggleCounting(cameraId, isEnabled) {
+            try {
+                const response = await fetch(`/cam6/control/${cameraId}/counting`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ enabled: isEnabled })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to toggle counting');
+                }
+                
+                const result = await response.json();
+                showMessage(`Counting for ${cameraId} ${isEnabled ? 'enabled' : 'disabled'} successfully`);
+                return result;
+            } catch (error) {
+                console.error('Error toggling counting:', error);
+                showMessage(`Error toggling counting for camera ${cameraId}`, true);
+                return null;
+            }
+        }
+
+        // Function to update counts manually
+        async function updateCount(cameraId, direction, value, isTransshipment = false) {
+            try {
+                let endpoint = `/cam6/control/${cameraId}/update`;
+                let payload;
+                
+                if (isTransshipment) {
+                    payload = { count: value };
+                } else {
+                    payload = { direction: direction, value: value };
+                }
+                
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to update count');
+                }
+                
+                const result = await response.json();
+                showMessage(`Updated ${direction} count for ${cameraId} successfully`);
+                return result;
+            } catch (error) {
+                console.error('Error updating count:', error);
+                showMessage(`Error updating count for camera ${cameraId}`, true);
+                return null;
+            }
+        }
+
+        // Function to create camera card
+        function createCameraCard(camera, data) {
+            const card = document.createElement('div');
+            card.className = `camera-card ${camera.isTransshipment ? 'transshipment-card' : ''}`;
+            card.id = `camera-${camera.id}`;
+            
+            // Get camera data from daily summary
+            let cameraData = data ? data[camera.id] : null;
+            let isOnline = cameraData ? cameraData.online : false;
+            let countingActive = cameraData ? (cameraData.counting_active || false) : false;
+            
+            // Prepare counts based on camera type
+            let inCount = 0;
+            let outCount = 0;
+            let transshipCount = 0;
+            
+            if (cameraData) {
+                if (camera.isTransshipment) {
+                    transshipCount = cameraData.count || 0;
+                } else {
+                    inCount = cameraData.in || 0;
+                    outCount = cameraData.out || 0;
+                }
+            }
+            
+            card.innerHTML = `
+                <div class="camera-header">
+                    <h3 class="camera-title">${camera.name}</h3>
+                    <span class="camera-status ${isOnline ? 'online' : 'offline'}">
+                        ${isOnline ? 'Online' : 'Offline'}
+                    </span>
+                </div>
+                
+                <div class="counting-status">
+                    <span class="counting-label">Automatic Counting:</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" class="counting-toggle" data-camera-id="${camera.id}" 
+                               ${countingActive ? 'checked' : ''}>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                
+                <div class="controls">
+                    ${camera.isTransshipment ? `
+                        <div class="counter">
+                            <span class="counter-label">Count:</span>
+                            <span class="counter-value" id="count-${camera.id}">${transshipCount}</span>
+                            <div class="counter-buttons">
+                                <button class="increment" data-camera-id="${camera.id}" data-type="count">+</button>
+                                <button class="decrement" data-camera-id="${camera.id}" data-type="count">-</button>
+                            </div>
+                        </div>
+                    ` : `
+                        <div class="counter">
+                            <span class="counter-label">In:</span>
+                            <span class="counter-value" id="in-${camera.id}">${inCount}</span>
+                            <div class="counter-buttons">
+                                <button class="increment" data-camera-id="${camera.id}" data-type="in">+</button>
+                                <button class="decrement" data-camera-id="${camera.id}" data-type="in">-</button>
+                            </div>
+                        </div>
+                        <div class="counter">
+                            <span class="counter-label">Out:</span>
+                            <span class="counter-value" id="out-${camera.id}">${outCount}</span>
+                            <div class="counter-buttons">
+                                <button class="increment" data-camera-id="${camera.id}" data-type="out">+</button>
+                                <button class="decrement" data-camera-id="${camera.id}" data-type="out">-</button>
+                            </div>
+                        </div>
+                        <div class="counter">
+                            <span class="counter-label">Total:</span>
+                            <span class="counter-value" id="total-${camera.id}">${inCount - outCount}</span>
+                        </div>
+                    `}
+                    
+                    <button class="save-button" data-camera-id="${camera.id}">Save Changes</button>
+                </div>
+            `;
+            
+            return card;
+        }
+
+        // Function to render all camera cards
+        async function renderCameraCards() {
+            const grid = document.getElementById('camera-grid');
+            grid.innerHTML = '<div class="loading">Loading camera data...</div>';
+            
+            const data = await fetchCameraData();
+            
+            if (data) {
+                grid.innerHTML = '';
+                cameras.forEach(camera => {
+                    const card = createCameraCard(camera, data);
+                    grid.appendChild(card);
+                });
+                
+                // Add event listeners to buttons
+                addEventListeners();
+            }
+        }
+
+        // Function to add event listeners to buttons
+        function addEventListeners() {
+            // Toggle counting buttons
+            document.querySelectorAll('.counting-toggle').forEach(toggle => {
+                toggle.addEventListener('change', async (e) => {
+                    const cameraId = e.target.dataset.cameraId;
+                    const isEnabled = e.target.checked;
+                    await toggleCounting(cameraId, isEnabled);
+                });
+            });
+            
+            // Increment/decrement buttons
+            document.querySelectorAll('.increment, .decrement').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const cameraId = e.target.dataset.cameraId;
+                    const type = e.target.dataset.type;
+                    const isIncrement = e.target.classList.contains('increment');
+                    
+                    // Get current value
+                    const valueElement = document.getElementById(`${type}-${cameraId}`);
+                    let currentValue = parseInt(valueElement.textContent);
+                    
+                    // Update value
+                    const newValue = isIncrement ? currentValue + 1 : Math.max(0, currentValue - 1);
+                    valueElement.textContent = newValue;
+                    
+                    // If we're updating a regular camera's in/out, also update total
+                    const camera = cameras.find(cam => cam.id === cameraId);
+                    if (!camera.isTransshipment && (type === 'in' || type === 'out')) {
+                        const inValue = parseInt(document.getElementById(`in-${cameraId}`).textContent);
+                        const outValue = parseInt(document.getElementById(`out-${cameraId}`).textContent);
+                        document.getElementById(`total-${cameraId}`).textContent = inValue - outValue;
+                    }
+                });
+            });
+            
+            // Save buttons
+            document.querySelectorAll('.save-button').forEach(button => {
+                button.addEventListener('click', async (e) => {
+                    const cameraId = e.target.dataset.cameraId;
+                    const camera = cameras.find(cam => cam.id === cameraId);
+                    
+                    if (camera.isTransshipment) {
+                        // For transshipment camera
+                        const countValue = parseInt(document.getElementById(`count-${cameraId}`).textContent);
+                        await updateCount(cameraId, null, countValue, true);
+                    } else {
+                        // For regular cameras
+                        const inValue = parseInt(document.getElementById(`in-${cameraId}`).textContent);
+                        const outValue = parseInt(document.getElementById(`out-${cameraId}`).textContent);
+                        
+                        // Update both in and out values
+                        await updateCount(cameraId, 'in', inValue);
+                        await updateCount(cameraId, 'out', outValue);
+                    }
+                });
+            });
+            
+            // Refresh button
+            document.getElementById('refresh').addEventListener('click', () => {
+                renderCameraCards();
+            });
+        }
+
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', () => {
+            renderCameraCards();
+        });
+    </script>
+</body>
+</html>

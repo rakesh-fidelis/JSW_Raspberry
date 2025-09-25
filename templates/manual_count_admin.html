@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manual Bag Count Admin</title>
+  <style>
+    body { font-family: Segoe UI, Arial, sans-serif; margin: 20px; }
+    .wrap { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 14px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; }
+    .row { display: flex; gap: 10px; align-items: center; margin: 8px 0; }
+    .row label { width: 130px; }
+    .row input { width: 140px; padding: 6px 8px; }
+    select { padding: 6px 8px; }
+    .btn { padding: 8px 12px; border: 0; background: #2b6cb0; color: #fff; cursor: pointer; border-radius: 4px; }
+    .btn.alt { background: #4a5568; }
+    .btn.warn { background: #c53030; }
+    .btn:disabled { background: #a0aec0; cursor: not-allowed; }
+    .counts { display: flex; gap: 14px; }
+    .counts div { background: #f7fafc; padding: 10px 12px; border-radius: 6px; }
+    .muted { color: #666; font-size: 12px; }
+    .status { padding: 6px 10px; border-radius: 4px; display: inline-block; }
+    .ok { background: #c6f6d5; color: #22543d; }
+    .bad { background: #fed7d7; color: #742a2a; }
+  </style>
+  <script>
+    let selectedCameraId = '602';
+    let current = { in: 0, out: 0, total: 0, status: 'offline', counting_active: false };
+
+    function setStatus(text, ok) {
+      const el = document.getElementById('status');
+      el.textContent = text;
+      el.className = 'status ' + (ok ? 'ok' : 'bad');
+    }
+
+    async function refresh() {
+      try {
+        const base = (window.ADMIN_BASE && window.ADMIN_BASE.length) ? window.ADMIN_BASE : '';
+        const res = await fetch(base + '/cam6/api/live_status');
+        const data = await res.json();
+        const cam = (data.cameras || []).find(c => c.camera_id === selectedCameraId);
+        if (cam) {
+          current.in = cam.bags_in || 0;
+          current.out = cam.bags_out || 0;
+          current.total = cam.total_bags || (current.in - current.out);
+          current.status = cam.status || 'offline';
+          current.counting_active = !!cam.counting_active;
+        }
+      } catch (e) {}
+      document.getElementById('currIn').textContent = current.in;
+      document.getElementById('currOut').textContent = current.out;
+      document.getElementById('currTotal').textContent = current.total;
+      setStatus(`${current.status}${current.counting_active ? ' • counting' : ''}`, current.status === 'online');
+    }
+
+    function isTransshipSelected() {
+      const v = (selectedCameraId || '').toString().toLowerCase();
+      return v === 'tranship' || v === 'transshipment' || v === 'transship';
+    }
+
+    async function setCount(which) {
+      const val = parseInt(document.getElementById('input_' + which).value || '0', 10);
+      const payload = isTransshipSelected() ? { count: val } : { direction: which, value: val };
+      const btn = document.getElementById('btn_' + which);
+      btn.disabled = true;
+      try {
+        const base = (window.ADMIN_BASE && window.ADMIN_BASE.length) ? window.ADMIN_BASE : '';
+        let res = await fetch(`${base}/cam6/control/${selectedCameraId}/update`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        });
+        let data = await res.json();
+        if (!res.ok || data.success === false) {
+          // Fallback to local /update_count in case camera exposes it at root
+          const fallbackPayload = isTransshipSelected() ? { count: val } : { direction: which, value: val };
+          res = await fetch(`${base}/update_count`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fallbackPayload) });
+          data = await res.json();
+          if (!res.ok || data.success === false) alert(data.error || 'Failed');
+        }
+      } catch (e) { alert('Network error'); }
+      btn.disabled = false;
+      refresh();
+    }
+
+    async function adjustCount(which, delta) {
+      const btn = document.getElementById('btn_adjust_' + which + '_' + (delta > 0 ? 'plus' : 'minus'));
+      if (btn) btn.disabled = true;
+      try {
+        const base = (window.ADMIN_BASE && window.ADMIN_BASE.length) ? window.ADMIN_BASE : '';
+        let res = await fetch(`${base}/cam6/control/${selectedCameraId}/adjust`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ direction: which, delta })
+        });
+        let data = await res.json();
+        if (!res.ok || data.success === false) {
+          // Fallback attempt via /update using computed new value would require reading current first; rely on server-side adjust path.
+          alert(data.error || 'Failed');
+        }
+      } catch (e) { alert('Network error'); }
+      if (btn) btn.disabled = false;
+      refresh();
+    }
+
+    async function setCountingLines(action) {
+      const btn = document.getElementById('btn_lines');
+      btn.disabled = true;
+      try {
+        const base = (window.ADMIN_BASE && window.ADMIN_BASE.length) ? window.ADMIN_BASE : '';
+        const res = await fetch(`${base}/cam6/control/${selectedCameraId}/counting_lines?action=${action}`);
+        if (!res.ok) alert('Failed to update counting_lines');
+      } catch (e) { alert('Network error'); }
+      btn.disabled = false;
+      refresh();
+    }
+
+    async function disableAll() {
+      const btn = document.getElementById('btn_disable_all');
+      btn.disabled = true;
+      try {
+        const base = (window.ADMIN_BASE && window.ADMIN_BASE.length) ? window.ADMIN_BASE : '';
+        await fetch(base + '/cam6/control/disable_all?action=disable');
+      } catch (e) { alert('Network error'); }
+      btn.disabled = false;
+      refresh();
+    }
+
+    function onCamChange() {
+      selectedCameraId = document.getElementById('camera').value;
+      refresh();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('camera').addEventListener('change', onCamChange);
+      refresh();
+    });
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Manual Bag Count Admin</h1>
+    <div class="grid">
+      <div class="card">
+        <div class="row">
+          <label>Camera</label>
+          <select id="camera">
+            <option value="102">Camera 1 (102)</option>
+            <option value="202">Camera 2 (202)</option>
+            <option value="302">Camera 3 (302)</option>
+            <option value="402">Camera 4 (402)</option>
+            <option value="502">Camera 5 (502)</option>
+            <option value="602" selected>Camera 6 (602)</option>
+            <option value="702">Camera 7 (702)</option>
+            <option value="tranship">Transshipment</option>
+          </select>
+        </div>
+        <div class="counts">
+          <div>In: <b id="currIn">0</b></div>
+          <div>Out: <b id="currOut">0</b></div>
+          <div>Total: <b id="currTotal">0</b></div>
+        </div>
+        <div class="row">
+          <span id="status" class="status bad">offline</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row">
+          <label for="input_in">Set Bags In</label>
+          <input id="input_in" type="number" min="0" />
+          <button id="btn_in" class="btn" onclick="setCount('in')">Set</button>
+          <button id="btn_adjust_in_minus" class="btn alt" onclick="adjustCount('in', -1)">-1</button>
+          <button id="btn_adjust_in_plus" class="btn alt" onclick="adjustCount('in', 1)">+1</button>
+        </div>
+        <div class="row">
+          <label for="input_out">Set Bags Out</label>
+          <input id="input_out" type="number" min="0" />
+          <button id="btn_out" class="btn" onclick="setCount('out')">Set</button>
+          <button id="btn_adjust_out_minus" class="btn alt" onclick="adjustCount('out', -1)">-1</button>
+          <button id="btn_adjust_out_plus" class="btn alt" onclick="adjustCount('out', 1)">+1</button>
+        </div>
+        <div class="row" style="margin-top: 8px; gap: 8px;">
+          <button id="btn_lines" class="btn alt" onclick="setCountingLines('disable')">Disable counting_lines</button>
+          <button class="btn alt" onclick="setCountingLines('enable')">Enable counting_lines</button>
+          <button id="btn_disable_all" class="btn warn" onclick="disableAll()">Disable All Cameras</button>
+        </div>
+        <div class="row"><span class="muted">No camera preview. Overlays on each stream reflect these values immediately.</span></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+
